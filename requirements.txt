@@ -1,0 +1,2 @@
+pyserial==3.5
+python-gsmmodem-new==0.13.0
