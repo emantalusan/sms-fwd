@@ -1,0 +1,77 @@
+{
+    "modem": {
+        "port": "/dev/ttyUSB0",
+        "baudrate": 115200,
+        "pin": null
+    },
+    "sms_recipients": [
+        "+1234567890",
+        "+0987654321"
+    ],
+    "email": {
+        "smtp_server": "smtp.gmail.com",
+        "smtp_port": 587,
+        "smtp_user": "your_email@gmail.com",
+        "smtp_password": "your_password",
+        "sender": "custom_sender@example.com",
+        "recipients": [
+            "recipient1@example.com",
+            "recipient2@example.com"
+        ],
+        "max_retries": 3
+    },
+    "api_providers": [
+        {
+            "name": "pushify",
+            "method": "POST",
+            "endpoint": "https://api.pushify.net/v1/send",
+            "headers": {
+                "Authorization": "Bearer sk_01jqgz3t63jrc3zqd98zhf1dmk",
+                "Content-Type": "application/json",
+                "User-Agent": "pushify-python/1.0.0"
+            },
+            "payload": {
+                "channel": "sms_forward",
+                "title": "SMS from {sender}",
+                "body": "Time: {timestamp}\nMessage: {message}"
+            },
+            "max_retries": 5,
+            "timeout": 10,
+            "default": true
+        },
+        {
+            "name": "ntfy",
+            "method": "POST",
+            "endpoint": "https://ntfy.sh/",
+            "headers": {
+                "Content-Type": "application/json"
+            },
+            "payload": {
+                "topic": "sms_notifications",
+                "message": "{message}",
+                "title": "SMS from {sender}",
+                "tags": ["sms", "notification"],
+                "priority": 4,
+                "attach": "https://example.com/sample.jpg",
+                "filename": "sms_notification.jpg",
+                "click": "https://example.com",
+                "actions": [
+                    {
+                        "action": "view",
+                        "label": "Admin panel",
+                        "url": "https://example.com/admin"
+                    }
+                ]
+            },
+            "max_retries": 3,
+            "timeout": 10,
+            "default": false
+        }
+    ],
+    "database": {
+        "file": "sms_database.db"
+    },
+    "max_retries": 3,
+    "default_timeout": 10,
+    "debug": false
+}
