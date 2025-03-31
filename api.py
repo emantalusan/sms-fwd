@@ -1,7 +1,7 @@
 import requests
 import logging
 import time
-from .main import api_queue, load_config
+from db import mark_as_forwarded
 
 logger = logging.getLogger('SMSForwarder')
 
@@ -39,7 +39,7 @@ def send_to_api_providers(api_providers, sender, timestamp, message, provider_na
             logger.error(f"Failed to send to {provider['name']} API: {e}")
     return success
 
-def api_forward_worker(api_providers, db_file):
+def api_forward_worker(api_providers, db_file, api_queue, failed_services, notify_failure, load_config):
     """Worker thread for API forwarding"""
     config = load_config()
     global_max_retries = config.get("max_retries", 3)
@@ -53,9 +53,6 @@ def api_forward_worker(api_providers, db_file):
         
         success = send_to_api_providers(api_providers, sender, timestamp, message, provider)
         
-        from .db import mark_as_forwarded
-        from .main import failed_services, notify_failure
-        
         if success:
             if sms_id:
                 mark_as_forwarded(db_file, sms_id, api_forwarded=True)
@@ -63,7 +60,7 @@ def api_forward_worker(api_providers, db_file):
                 failed_services.remove("API")
         else:
             retry_count += 1
-            max_retries = max(provider.get("max_retries", global_max_retries) for provider in api_providers)
+            max_retries = max(p.get("max_retries", global_max_retries) for p in api_providers)
             if retry_count < max_retries:
                 time.sleep(5 * retry_count)
                 api_queue.put((sender, timestamp, message, sms_id, retry_count, provider))

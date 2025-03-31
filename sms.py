@@ -1,12 +1,11 @@
 import logging
 import time
 from gsmmodem.pdu import Concatenation
-from .main import multipart_messages, sms_queue, email_queue, api_queue, load_config
-from .db import save_or_update_sms
+from db import save_or_update_sms
 
 logger = logging.getLogger('SMSForwarder')
 
-def sms_forward_worker(modem, db_file, recipients):
+def sms_forward_worker(modem, db_file, recipients, sms_queue, failed_services, notify_failure, load_config):
     """Worker thread for SMS forwarding"""
     config = load_config()
     max_retries = config.get("sms_max_retries", config.get("max_retries", 3))
@@ -21,9 +20,7 @@ def sms_forward_worker(modem, db_file, recipients):
             except Exception as e:
                 logger.error(f"Failed to forward SMS to {recipient}: {e}")
         
-        from .db import mark_as_forwarded
-        from .main import failed_services, notify_failure
-        
+        from db import mark_as_forwarded
         if success:
             if sms_id:
                 mark_as_forwarded(db_file, sms_id, sms_forwarded=True)
@@ -42,7 +39,7 @@ def sms_forward_worker(modem, db_file, recipients):
         
         sms_queue.task_done()
 
-def handleSms(sms, provider=None):
+def handleSms(sms, api_queue, sms_queue, email_queue, multipart_messages, load_config, notify_failure, failed_services):
     """Handle incoming SMS"""
     sender = sms.number
     timestamp = sms.time
@@ -66,19 +63,19 @@ def handleSms(sms, provider=None):
                 message_data['parts'].append((part_num, text))
                 
                 if part_num == 1:
-                    api_queue.put((sender, timestamp, text, sms_id, 0, provider))
+                    api_queue.put((sender, timestamp, text, sms_id, 0, None))
                 
                 if len(message_data['parts']) == total_parts:
                     complete_message = ''.join(part[1] for part in sorted(message_data['parts']))
                     sms_queue.put((sender, timestamp, complete_message, sms_id, 0))
                     email_queue.put((sender, timestamp, complete_message, sms_id, 0))
-                    api_queue.put((sender, timestamp, complete_message, sms_id, 0, provider))
+                    api_queue.put((sender, timestamp, complete_message, sms_id, 0, None))
                     del multipart_messages[sender][ref_num]
                     if not multipart_messages[sender]:
                         del multipart_messages[sender]
                 return
     
     sms_id = save_or_update_sms(sender, timestamp, text, db_file)
-    api_queue.put((sender, timestamp, text, sms_id, 0, provider))
+    api_queue.put((sender, timestamp, text, sms_id, 0, None))
     sms_queue.put((sender, timestamp, text, sms_id, 0))
     email_queue.put((sender, timestamp, text, sms_id, 0))

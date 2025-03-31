@@ -57,6 +57,19 @@ def load_config():
         with open(SAMPLE_CONFIG_FILE, 'r') as f:
             return json.load(f)
 
+def notify_failure(service_name, sms_id):
+    """Queue failure notification"""
+    config = load_config()
+    timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+    message = f"Service {service_name} failed after max retries for SMS ID: {sms_id} at {timestamp}"
+    
+    if "SMS" not in failed_services and config["sms_recipients"]:
+        sms_queue.put(("System", timestamp, message, None, 0))
+    if "Email" not in failed_services and config["email"].get("recipients"):
+        email_queue.put(("System", timestamp, message, None, 0))
+    if "API" not in failed_services and config["api_providers"]:
+        api_queue.put(("System", timestamp, message, None, 0, None))
+
 def main():
     config = load_config()
     
@@ -69,14 +82,16 @@ def main():
     init_database(db_file)
     
     logger.info("Initializing modem...")
-    modem = GsmModem(modem_config["port"], modem_config["baudrate"], smsReceivedCallbackFunc=handleSms)
+    modem = GsmModem(modem_config["port"], modem_config["baudrate"], 
+                    smsReceivedCallbackFunc=lambda sms: handleSms(sms, api_queue, sms_queue, email_queue, 
+                                                                multipart_messages, load_config, notify_failure, failed_services))
     modem.smsTextMode = False
     modem.connect(modem_config["pin"])
     modem.waitForNetworkCoverage(10)
     
-    api_thread = threading.Thread(target=api_forward_worker, args=(api_providers, db_file), daemon=True, name="API-Forwarder")
-    sms_thread = threading.Thread(target=sms_forward_worker, args=(modem, db_file, sms_recipients), daemon=True, name="SMS-Forwarder")
-    email_thread = threading.Thread(target=email_forward_worker, args=(email_config, db_file), daemon=True, name="Email-Forwarder")
+    api_thread = threading.Thread(target=api_forward_worker, args=(api_providers, db_file, api_queue, failed_services, notify_failure, load_config), daemon=True, name="API-Forwarder")
+    sms_thread = threading.Thread(target=sms_forward_worker, args=(modem, db_file, sms_recipients, sms_queue, failed_services, notify_failure, load_config), daemon=True, name="SMS-Forwarder")
+    email_thread = threading.Thread(target=email_forward_worker, args=(email_config, db_file, email_queue, failed_services, notify_failure, load_config), daemon=True, name="Email-Forwarder")
     api_thread.start()
     sms_thread.start()
     email_thread.start()

@@ -1,5 +1,3 @@
-TEST-MODEM.PY
-
 import serial
 import time
 import sys
